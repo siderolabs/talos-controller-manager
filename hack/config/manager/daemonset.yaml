@@ -1,0 +1,33 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: talos-controller-manager
+  labels:
+    app: talos-controller-manager
+spec:
+  selector:
+    matchLabels:
+      app: talos-controller-manager
+  updateStrategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      annotations:
+      labels:
+        app: talos-controller-manager
+    spec:
+      containers:
+        - name: talos-controller-manager
+          image: "docker.io/andrewrynhard/talos-controller-manager:latest"
+          imagePullPolicy: Always
+          command:
+            - /talos-controller-manager
+      restartPolicy: Always
+      serviceAccount: talos-controller-manager
+      serviceAccountName: talos-controller-manager
+      nodeSelector:
+        node-role.kubernetes.io/master: ""
+      tolerations:
+        - effect: NoSchedule
+          key: node-role.kubernetes.io/master
+          operator: Exists
