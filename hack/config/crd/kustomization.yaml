@@ -1,0 +1,6 @@
+resources:
+  - upgrade.talos.dev_pools.yaml
+# +kubebuilder:scaffold:crdkustomizeresource
+
+configurations:
+  - kustomizeconfig.yaml

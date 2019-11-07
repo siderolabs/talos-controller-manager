@@ -1,0 +1,89 @@
+
+---
+apiVersion: apiextensions.k8s.io/v1beta1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.2.2
+  creationTimestamp: null
+  name: pools.upgrade.talos.dev
+spec:
+  additionalPrinterColumns:
+  - JSONPath: .spec.channel
+    description: the pool's upgrade channel
+    name: Channel
+    type: string
+  - JSONPath: .status.size
+    description: the number of nodes in the pool
+    name: Size
+    type: integer
+  - JSONPath: .spec.concurrency
+    description: the pool's maximum number of concurrent upgrades
+    name: Concurrency
+    type: string
+  - JSONPath: .status.inProgess
+    description: the nodes in the pool that are currently in progress of upgrading
+    name: In Progress
+    type: string
+  group: upgrade.talos.dev
+  names:
+    kind: Pool
+    listKind: PoolList
+    plural: pools
+    singular: pool
+  scope: ""
+  subresources: {}
+  validation:
+    openAPIV3Schema:
+      description: Pool is the Schema for the pools API
+      properties:
+        apiVersion:
+          description: 'APIVersion defines the versioned schema of this representation
+            of an object. Servers should convert recognized schemas to the latest
+            internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+          type: string
+        kind:
+          description: 'Kind is a string value representing the REST resource this
+            object represents. Servers may infer this from the endpoint the client
+            submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+          type: string
+        metadata:
+          type: object
+        spec:
+          description: PoolSpec defines the desired state of Pool
+          properties:
+            channel:
+              type: string
+            checkInterval:
+              type: string
+            concurrency:
+              type: integer
+            name:
+              type: string
+            onFailure:
+              type: string
+            registry:
+              type: string
+            repository:
+              type: string
+          type: object
+        status:
+          description: PoolStatus defines the observed state of Pool
+          properties:
+            inProgess:
+              type: string
+            size:
+              type: integer
+          type: object
+      type: object
+  version: v1alpha1
+  versions:
+  - name: v1alpha1
+    served: true
+    storage: true
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: []
+  storedVersions: []

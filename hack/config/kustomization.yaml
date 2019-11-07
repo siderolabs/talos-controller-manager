@@ -1,0 +1,14 @@
+# Adds namespace to all resources.
+namespace: talos-system
+
+# Labels to add to all resources and selectors.
+commonLabels:
+  app: talos-controller-manager
+
+bases:
+  - crd
+  - rbac
+  - manager
+
+patchesStrategicMerge:
+  - env.yaml

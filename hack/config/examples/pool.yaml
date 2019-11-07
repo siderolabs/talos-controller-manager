@@ -1,0 +1,27 @@
+apiVersion: upgrade.talos.dev/v1alpha1
+kind: Pool
+metadata:
+  name: control-plane-example
+  namespace: talos-system
+spec:
+  name: serial-latest
+  channel: latest
+  registry: https://registry-1.docker.io
+  repository: autonomy/installer
+  concurrency: 1
+  onFailure: Pause
+  checkInterval: 2m
+---
+apiVersion: upgrade.talos.dev/v1alpha1
+kind: Pool
+metadata:
+  name: workers-example
+  namespace: talos-system
+spec:
+  name: concurrent-latest
+  channel: latest
+  registry: https://registry-1.docker.io
+  repository: autonomy/installer
+  concurrency: 3
+  onFailure: Retry
+  checkInterval: 2m
