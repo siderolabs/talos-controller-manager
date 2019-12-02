@@ -18,7 +18,7 @@ spec:
     spec:
       containers:
         - name: talos-controller-manager
-          image: "docker.io/andrewrynhard/talos-controller-manager:latest"
+          image: "docker.io/autonomy/talos-controller-manager:latest"
           imagePullPolicy: Always
           command:
             - /talos-controller-manager
