@@ -8,7 +8,7 @@ generate: # Generate code.
 	controller-gen object:headerFile=./hack/boilerplate.go.txt paths="./..."
 
 container: # Build a container image.
-	docker build --tag docker.io/andrewrynhard/talos-controller-manager .
+	docker build --tag docker.io/autonomy/talos-controller-manager .
 
 .PHONY: manifests
 manifests: # Generate manifests e.g. CRD, RBAC etc.
