@@ -19,7 +19,7 @@ require (
 	github.com/opencontainers/go-digest v1.0.0-rc1
 	github.com/pkg/errors v0.8.1
 	github.com/prometheus/client_golang v1.2.1 // indirect
-	github.com/talos-systems/talos v0.3.0-alpha.9.0.20191129203523-ad2f2574d7e7
+	github.com/talos-systems/talos v0.3.0-alpha.10
 	golang.org/x/sync v0.0.0-20190911185100-cd5d95a43a6e
 	golang.org/x/time v0.0.0-20191024005414-555d28b269f0 // indirect
 	golang.org/x/xerrors v0.0.0-20191011141410-1b5146add898 // indirect

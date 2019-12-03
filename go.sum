@@ -364,6 +364,8 @@ github.com/talos-systems/talos v0.3.0-alpha.6.0.20191107203214-6d5bbaf7c82f h1:R
 github.com/talos-systems/talos v0.3.0-alpha.6.0.20191107203214-6d5bbaf7c82f/go.mod h1:o2aQ668ToodnHREccDTZi6dVxKHRmr0vlcsCDVHkn7Q=
 github.com/talos-systems/talos v0.3.0-alpha.9.0.20191129203523-ad2f2574d7e7 h1:H218RTL9Hef4U+LvwR+phOKgic8bUldStFYfoNJRaYY=
 github.com/talos-systems/talos v0.3.0-alpha.9.0.20191129203523-ad2f2574d7e7/go.mod h1:VXhfAs7xYxvN88QlKjS48HpatDc9NDO/eif5ISE+/0Q=
+github.com/talos-systems/talos v0.3.0-alpha.10 h1:hxwfr3CsGSFDZUwtRAAZd5sb48wI5ks6fIxQuNlxAfw=
+github.com/talos-systems/talos v0.3.0-alpha.10/go.mod h1:aCJkiuspQtuHL+0RfyzsTebu0+zNAH9y7I09xdNWpes=
 github.com/tmc/grpc-websocket-proxy v0.0.0-20170815181823-89b8d40f7ca8/go.mod h1:ncp9v5uamzpCO7NfCPTXjqaC+bZgJeR0sMTm6dMHP7U=
 github.com/u-root/u-root v6.0.0+incompatible/go.mod h1:RYkpo8pTHrNjW08opNd/U6p/RJE7K0D8fXO0d47+3YY=
 github.com/ugorji/go/codec v0.0.0-20181204163529-d75b2dcb6bc8/go.mod h1:VFNgLljTbGfSG7qAOspJ7OScBnGdDN/yBr0sguwnwf0=
