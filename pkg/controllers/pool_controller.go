@@ -14,6 +14,7 @@ import (
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/selection"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -53,6 +54,7 @@ func (r *PoolReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 func (r *PoolReconciler) reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	var pool poolv1alpha1.Pool
+
 	if err := r.Get(ctx, req.NamespacedName, &pool); err != nil {
 		if apierrors.IsNotFound(err) {
 			return ctrl.Result{}, nil
@@ -63,34 +65,44 @@ func (r *PoolReconciler) reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 		return ctrl.Result{}, err
 	}
 
-	// TODO(andrewrynhard): Should these be configurable?
-	channels := []channel.Channel{
-		channel.LatestChannel,
-		channel.EdgeChannel,
-		channel.AlphaChannel,
-		channel.BetaChannel,
-		channel.StableChannel,
+	if pool.Status.NextRun.Time.After(time.Now()) {
+		r.Log.Info("skipping reconciliation, next run is in the future", "pool", pool.Spec.Name)
+		return ctrl.Result{RequeueAfter: pool.Spec.CheckInterval.Duration}, nil
 	}
 
-	cache := version.NewVersion(&version.V1Alpha1{})
+	v := pool.Spec.Version
 
-	go func() {
-		if err := cache.Run(pool.Spec.Registry, pool.Spec.Repository, channels); err != nil {
-			r.Log.Error(err, "version cache failed")
-			os.Exit(1)
+	if v == "" {
+		// TODO(andrewrynhard): Should these be configurable?
+		channels := []channel.Channel{
+			channel.LatestChannel,
+			channel.EdgeChannel,
+			channel.AlphaChannel,
+			channel.BetaChannel,
+			channel.StableChannel,
 		}
-	}()
 
-	if !cache.WaitForCacheSync() {
-		return ctrl.Result{}, fmt.Errorf("timeout waiting for version cache to sync")
+		cache := version.NewVersion(&version.V1Alpha1{})
+
+		go func() {
+			if err := cache.Run(pool.Spec.Registry, pool.Spec.Repository, channels); err != nil {
+				r.Log.Error(err, "version cache failed")
+				os.Exit(1)
+			}
+		}()
+
+		if !cache.WaitForCacheSync() {
+			return r.Result(ctx, req, false), fmt.Errorf("timeout waiting for version cache to sync")
+		}
+
+		var ok bool
+
+		if v, ok = cache.Get(pool.Spec.Channel); !ok {
+			return r.Result(ctx, req, false), fmt.Errorf("no version found for %q channel", pool.Spec.Channel)
+		}
+
+		r.Log.Info("obtained version for pool", "version", v, "pool", pool.Spec.Name, "channel", pool.Spec.Channel)
 	}
-
-	version, ok := cache.Get(pool.Spec.Channel)
-	if !ok {
-		return ctrl.Result{}, fmt.Errorf("no version found for %q channel", pool.Spec.Channel)
-	}
-
-	r.Log.Info("obtained version for pool", "version", version, "pool", pool.Spec.Name, "channel", pool.Spec.Channel)
 
 	c := &upgrader.Context{
 		Client: r.Client,
@@ -106,7 +118,7 @@ func (r *PoolReconciler) reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 
 	label, err := labels.NewRequirement(constants.V1Alpha1PoolLabel, selection.Equals, []string{pool.Spec.Name})
 	if err != nil {
-		return ctrl.Result{}, fmt.Errorf("failed to build label: %w", err)
+		return r.Result(ctx, req, false), err
 	}
 
 	opts := &client.ListOptions{
@@ -116,7 +128,7 @@ func (r *PoolReconciler) reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 	var nodes corev1.NodeList
 
 	if err := r.List(ctx, &nodes, opts); err != nil {
-		return ctrl.Result{}, err
+		return r.Result(ctx, req, false), err
 	}
 
 	// Update the status.
@@ -124,7 +136,7 @@ func (r *PoolReconciler) reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 	pool.Status.Size = len(nodes.Items)
 
 	if err := r.Update(context.TODO(), &pool); err != nil {
-		return ctrl.Result{}, err
+		return r.Result(ctx, req, false), err
 	}
 
 	// Attempt to continue any existing upgrades.
@@ -142,33 +154,60 @@ func (r *PoolReconciler) reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 
 	if len(nodesInProgess.Items) > 0 {
 		r.Log.Info("pool has upgrades in progress", "count", len(nodesInProgess.Items), "pool", pool.Spec.Name, "channel", pool.Spec.Channel)
-		if err := policy.Run(nodesInProgess, version); err != nil {
+		if err := policy.Run(nodesInProgess, v); err != nil {
 			r.Log.Error(err, "upgrade failed")
 
-			return r.Result(pool), err
 		}
 	}
 
 	// Upgrade all nodes.
 
-	if err := policy.Run(nodes, version); err != nil {
+	if err := policy.Run(nodes, v); err != nil {
 		r.Log.Error(err, "upgrade failed")
 
-		return r.Result(pool), err
+		return r.Result(ctx, req, true), err
 	}
 
-	return ctrl.Result{RequeueAfter: pool.Spec.CheckInterval.Duration}, nil
+	return r.Result(ctx, req, false), nil
 }
 
-func (r *PoolReconciler) Result(pool poolv1alpha1.Pool) ctrl.Result {
-	switch pool.Spec.FailurePolicy {
-	case "Pause":
-		r.Log.Info("pausing upgrades", "pool", pool.Spec.Name)
-		return ctrl.Result{Requeue: false}
-	case "Retry":
-		r.Log.Info("retrying upgrades", "when", time.Now().Add(pool.Spec.CheckInterval.Duration), "pool", pool.Spec.Name)
-		fallthrough
-	default:
-		return ctrl.Result{RequeueAfter: pool.Spec.CheckInterval.Duration}
+func (r *PoolReconciler) Result(ctx context.Context, req ctrl.Request, fail bool) ctrl.Result {
+	var pool poolv1alpha1.Pool
+
+	if err := r.Get(ctx, req.NamespacedName, &pool); err != nil {
+		if apierrors.IsNotFound(err) {
+			return ctrl.Result{}
+		}
+
+		r.Log.Error(err, "unable to get pool")
+
+		return ctrl.Result{}
 	}
+
+	next := metav1.NewTime(time.Now().Add(pool.Spec.CheckInterval.Duration))
+
+	defer func() {
+		if err := r.Update(ctx, &pool); err != nil {
+			r.Log.Info("failed to update pool", "pool", pool.Spec.Name)
+		}
+	}()
+
+	if fail {
+		switch pool.Spec.FailurePolicy {
+		case "Pause":
+			pool.Status.NextRun = metav1.Time{}
+
+			r.Log.Info("pausing upgrades", "pool", pool.Spec.Name)
+
+			return ctrl.Result{Requeue: false}
+		case "Retry":
+			// Nothing to do.
+		}
+	}
+
+	pool.Status.NextRun = next
+
+	r.Log.Info("requeuing upgrade", "when", next.Time, "pool", pool.Spec.Name)
+
+	return ctrl.Result{RequeueAfter: pool.Spec.CheckInterval.Duration}
 }

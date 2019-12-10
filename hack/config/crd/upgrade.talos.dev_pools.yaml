@@ -21,6 +21,11 @@ spec:
     description: the pool's maximum number of concurrent upgrades
     name: Concurrency
     type: string
+  - JSONPath: .status.nextRun
+    description: when the next upgrade attempt will be made
+    format: date-time
+    name: Next Run
+    type: string
   - JSONPath: .status.inProgess
     description: the nodes in the pool that are currently in progress of upgrading
     name: In Progress
@@ -66,11 +71,16 @@ spec:
               type: string
             repository:
               type: string
+            version:
+              type: string
           type: object
         status:
           description: PoolStatus defines the observed state of Pool
           properties:
             inProgess:
+              type: string
+            nextRun:
+              format: date-time
               type: string
             size:
               type: integer

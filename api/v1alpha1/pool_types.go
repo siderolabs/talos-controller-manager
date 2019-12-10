@@ -14,6 +14,7 @@ import (
 type PoolSpec struct {
 	Name          string           `json:"name,omitempty"`
 	Channel       string           `json:"channel,omitempty"`
+	Version       string           `json:"version,omitempty"`
 	Registry      string           `json:"registry,omitempty"`
 	Repository    string           `json:"repository,omitempty"`
 	Concurrency   int              `json:"concurrency,omitempty"`
@@ -23,16 +24,19 @@ type PoolSpec struct {
 
 // PoolStatus defines the observed state of Pool
 type PoolStatus struct {
-	Size       int    `json:"size,omitempty"`
-	InProgress string `json:"inProgess,omitempty"`
+	Size       int         `json:"size,omitempty"`
+	NextRun    metav1.Time `json:"nextRun,omitempty"`
+	InProgress string      `json:"inProgess,omitempty"`
 }
 
 // +kubebuilder:object:root=true
 
 // Pool is the Schema for the pools API
+// See https://book.kubebuilder.io/reference/markers/crd.html
 // +kubebuilder:printcolumn:name="Channel",type="string",JSONPath=".spec.channel",description="the pool's upgrade channel"
 // +kubebuilder:printcolumn:name="Size",type="integer",JSONPath=".status.size",description="the number of nodes in the pool"
 // +kubebuilder:printcolumn:name="Concurrency",type="string",JSONPath=".spec.concurrency",description="the pool's maximum number of concurrent upgrades"
+// +kubebuilder:printcolumn:name="Next Run",type="string",format="date-time",JSONPath=".status.nextRun",description="when the next upgrade attempt will be made (UTC time standard)"
 // +kubebuilder:printcolumn:name="In Progress",type="string",JSONPath=".status.inProgess",description="the nodes in the pool that are currently in progress of upgrading"
 type Pool struct {
 	metav1.TypeMeta   `json:",inline"`
