@@ -1,0 +1,8 @@
+bases:
+  - git@github.com:talos-systems/talos-controller-manager/hack/config?ref=master
+
+resources:
+  - pool.yaml
+
+patchesStrategicMerge:
+  - env.yaml
