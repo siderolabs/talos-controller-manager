@@ -29,7 +29,7 @@ container: generate # Build a container image.
 	@mkdir -p ./build
 	buildctl --addr $(BUILDKIT_HOST) \
 		build \
-		--output type=docker,dest=build/$@.tar,name=docker.io/autonomy/talos-controller-manager:$(TAG)$(PUSH_ARGS) \
+		--output type=image,name=docker.io/autonomy/talos-controller-manager:$(TAG)$(PUSH_ARGS) \
 		--opt target=$@ \
 		$(COMMON_ARGS)
 
