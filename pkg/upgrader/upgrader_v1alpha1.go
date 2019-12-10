@@ -110,7 +110,7 @@ func (v1alpha1 V1Alpha1) Upgrade(node corev1.Node, tag string) (err error) {
 	if err != nil {
 		return err
 	}
-	csr, identity, err = x509.NewCSRAndIdentity(hostname, []net.IP{})
+	csr, identity, err = x509.NewCSRAndIdentity([]string{hostname}, []net.IP{})
 	if err != nil {
 		return err
 	}
@@ -132,7 +132,7 @@ func (v1alpha1 V1Alpha1) Upgrade(node corev1.Node, tag string) (err error) {
 		}
 	}
 
-	c, err := client.NewClient(creds, target, talosconstants.ApidPort)
+	c, err := client.NewClient(creds, []string{target}, talosconstants.ApidPort)
 	if err != nil {
 		return fmt.Errorf("error constructing client: %w", err)
 	}
@@ -358,7 +358,7 @@ func getVersion(ctx context.Context, client *client.Client) (version *machineapi
 }
 
 func streamLogs(ctx context.Context, client *client.Client, node corev1.Node) error {
-	stream, err := client.Logs(ctx, "system", common.ContainerDriver_CONTAINERD, "machined")
+	stream, err := client.Logs(ctx, "system", common.ContainerDriver_CONTAINERD, "machined", true)
 	if err != nil {
 		log.Printf("error fetching logs: %s", err)
 	}
