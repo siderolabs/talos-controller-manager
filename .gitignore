@@ -1,2 +1,3 @@
+build
 hack/config/env.yaml
 talos-controller-manager

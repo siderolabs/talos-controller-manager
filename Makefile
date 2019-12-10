@@ -1,21 +1,56 @@
-all: manager container
+COMMON_ARGS = --progress=plain
+COMMON_ARGS += --frontend=dockerfile.v0
+COMMON_ARGS += --local context=.
+COMMON_ARGS += --local dockerfile=.
 
-manager: generate
-	CGO_ENABLED=0 go build .
+SHA ?= $(shell gitmeta git sha)
+TAG ?= $(shell gitmeta image tag)
+BRANCH ?= $(shell gitmeta git branch)
+
+BUILDKIT_HOST ?= tcp://0.0.0.0:1234
+
+ifeq ($(PUSH),true)
+PUSH_ARGS = ,push=true
+else
+PUSH_ARGS =
+endif
+
+all: manifests container
 
 .PHONY: generate
 generate: # Generate code.
-	controller-gen object:headerFile=./hack/boilerplate.go.txt paths="./..."
+	buildctl --addr $(BUILDKIT_HOST) \
+		build \
+		--output type=local,dest=. \
+		--opt target=$@ \
+		$(COMMON_ARGS)
 
-container: # Build a container image.
-	docker build --tag docker.io/autonomy/talos-controller-manager .
+container: generate # Build a container image.
+	@mkdir -p ./build
+	buildctl --addr $(BUILDKIT_HOST) \
+		build \
+		--output type=docker,dest=build/$@.tar,name=docker.io/autonomy/talos-controller-manager:$(TAG)$(PUSH_ARGS) \
+		--opt target=$@ \
+		$(COMMON_ARGS)
 
 .PHONY: manifests
 manifests: # Generate manifests e.g. CRD, RBAC etc.
-	controller-gen rbac:roleName=talos-controller-manager-role crd paths="./..." output:rbac:artifacts:config=hack/config/rbac output:crd:artifacts:config=hack/config/crd
+	buildctl --addr $(BUILDKIT_HOST) \
+		build \
+		--output type=local,dest=. \
+		--opt target=$@ \
+		$(COMMON_ARGS)
 
-deploy: manifests # Deploy controller-manager to a cluster.
+release: manifests container
+	@mkdir -p ./build
+	buildctl --addr $(BUILDKIT_HOST) \
+		build \
+		--output type=local,dest=./build \
+		--opt target=$@ \
+		$(COMMON_ARGS)
+
+deploy: manifests # Deploy to a cluster.
 	kubectl apply -k hack/config
 
-destroy: # Remove controller-manager from a cluster.
+destroy: # Remove from a cluster.
 	kubectl delete -k hack/config

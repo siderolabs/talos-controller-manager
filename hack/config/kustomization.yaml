@@ -9,6 +9,3 @@ bases:
   - crd
   - rbac
   - manager
-
-patchesStrategicMerge:
-  - env.yaml
