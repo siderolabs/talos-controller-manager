@@ -29,7 +29,7 @@ type Result struct {
 
 func (policy ConcurrentPolicy) Run(nodes corev1.NodeList, version string) error {
 	jobs := make(chan Job, policy.Concurrency)
-	results := make(chan Result, policy.Concurrency)
+	results := make(chan Result, len(nodes.Items))
 
 	for w := 0; w < policy.Concurrency; w++ {
 		go policy.worker(w, jobs, results)
