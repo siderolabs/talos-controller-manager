@@ -60,6 +60,21 @@ steps:
       - name: docker-socket
         path: /var/run
 
+  - name: build-yaml
+    image: autonomy/build-container:latest
+    pull: always
+    environment:
+      BINDIR: /usr/local/bin
+      BUILDKIT_HOST: ${BUILDKIT_HOST=tcp://buildkitd.ci.svc:1234}
+    commands:
+      - make release
+    when:
+      event:
+        - tag
+    volumes:
+      - name: docker-socket
+        path: /var/run
+
   - name: release
     image: plugins/github-release
     settings:
