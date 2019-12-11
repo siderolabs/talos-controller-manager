@@ -1,11 +1,12 @@
+SHA ?= $(shell gitmeta git sha)
+TAG ?= $(shell gitmeta image tag)
+BRANCH ?= $(shell gitmeta git branch)
+
 COMMON_ARGS = --progress=plain
 COMMON_ARGS += --frontend=dockerfile.v0
 COMMON_ARGS += --local context=.
 COMMON_ARGS += --local dockerfile=.
-
-SHA ?= $(shell gitmeta git sha)
-TAG ?= $(shell gitmeta image tag)
-BRANCH ?= $(shell gitmeta git branch)
+COMMON_ARGS += --opt build-arg:TAG=$(TAG)
 
 BUILDKIT_HOST ?= tcp://0.0.0.0:1234
 

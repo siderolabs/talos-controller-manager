@@ -31,8 +31,17 @@ FROM scratch AS generate
 COPY --from=generate-build /src/api /api
 
 FROM k8s.gcr.io/hyperkube:v1.17.0 AS release-build
+RUN apt update -y \
+    && apt install -y curl \
+    && curl -LO https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize%2Fv3.4.0/kustomize_v3.4.0_linux_amd64.tar.gz \
+    && tar -xf kustomize_v3.4.0_linux_amd64.tar.gz -C /usr/local/bin \
+    && rm kustomize_v3.4.0_linux_amd64.tar.gz
 COPY ./hack ./hack
-RUN kubectl kustomize hack/config >/release.yaml
+ARG TAG
+RUN cd hack/config/manager \
+    && kustomize edit set image docker.io/autonomy/talos-controller-manager:$TAG \
+    && cd - \
+    && kubectl kustomize hack/config >/release.yaml
 FROM scratch AS release
 COPY --from=release-build /release.yaml /release.yaml
 

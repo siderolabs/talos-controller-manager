@@ -7,3 +7,6 @@ resources:
   - leader_election_role_binding.yaml
   - serviceaccount.yaml
   - daemonset.yaml
+images:
+  - name: docker.io/autonomy/talos-controller-manager
+    newTag: latest
