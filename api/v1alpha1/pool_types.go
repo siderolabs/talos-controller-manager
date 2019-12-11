@@ -30,6 +30,7 @@ type PoolStatus struct {
 }
 
 // +kubebuilder:object:root=true
+// +kubebuilder:resource:path=pools,scope=Cluster
 
 // Pool is the Schema for the pools API
 // See https://book.kubebuilder.io/reference/markers/crd.html
