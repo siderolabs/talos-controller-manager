@@ -65,6 +65,11 @@ func (r *PoolReconciler) reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 		return ctrl.Result{}, err
 	}
 
+	if time.Until(pool.Status.NextRun.Time) > pool.Spec.CheckInterval.Duration {
+		r.Log.Info("rescheduling next run to checkInterval duration", "checkinterval", pool.Spec.CheckInterval.Duration)
+		return ctrl.Result{RequeueAfter: pool.Spec.CheckInterval.Duration}, nil
+	}
+
 	if pool.Status.NextRun.Time.After(time.Now()) {
 		r.Log.Info("skipping reconciliation, next run is in the future", "pool", pool.Spec.Name)
 		return ctrl.Result{RequeueAfter: pool.Spec.CheckInterval.Duration}, nil
@@ -156,7 +161,6 @@ func (r *PoolReconciler) reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 		r.Log.Info("pool has upgrades in progress", "count", len(nodesInProgess.Items), "pool", pool.Spec.Name, "channel", pool.Spec.Channel)
 		if err := policy.Run(nodesInProgess, v); err != nil {
 			r.Log.Error(err, "upgrade failed")
-
 		}
 	}
 
