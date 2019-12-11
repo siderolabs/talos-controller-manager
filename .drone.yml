@@ -55,6 +55,21 @@ steps:
       - name: docker-socket
         path: /var/run
 
+  - name: release
+    image: plugins/github-release
+    settings:
+      api_key:
+        from_secret: github_token
+      checksum:
+        - sha256
+        - sha512
+      draft: true
+      files:
+        - build/*
+    when:
+      event:
+        - tag
+
 volumes:
   - name: docker-socket
     temp: {}
