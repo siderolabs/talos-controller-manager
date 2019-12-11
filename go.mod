@@ -18,14 +18,14 @@ require (
 	github.com/opencontainers/go-digest v1.0.0-rc1
 	github.com/pkg/errors v0.8.1
 	github.com/prometheus/client_golang v1.2.1 // indirect
-	github.com/talos-systems/talos v0.3.0-alpha.10.0.20191209232626-09fbe2d9ad23
+	github.com/talos-systems/talos v0.3.0-beta.0
 	golang.org/x/time v0.0.0-20191024005414-555d28b269f0 // indirect
 	golang.org/x/xerrors v0.0.0-20191011141410-1b5146add898 // indirect
 	google.golang.org/appengine v1.6.5 // indirect
 	google.golang.org/grpc v1.25.1
-	k8s.io/api v0.0.0-20191109101513-0171b7c15da1
+	k8s.io/api v0.17.0
 	k8s.io/apiextensions-apiserver v0.0.0-20191108071732-08c66a398f44 // indirect
-	k8s.io/apimachinery v0.0.0-20191111054156-6eb29fdf75dc
-	k8s.io/client-go v0.0.0-20191108070106-f8f007fd456c
+	k8s.io/apimachinery v0.17.0
+	k8s.io/client-go v0.17.0
 	sigs.k8s.io/controller-runtime v0.3.1-0.20191105233659-81842d0e78f7
 )

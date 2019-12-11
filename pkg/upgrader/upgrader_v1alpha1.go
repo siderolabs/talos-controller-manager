@@ -342,14 +342,14 @@ func waitForHealthy(node corev1.Node, config *restclient.Config) (err error) {
 
 func getVersion(ctx context.Context, client *client.Client) (version *machineapi.VersionInfo, err error) {
 	err = retry.Constant(15*time.Minute, retry.WithUnits(3*time.Second), retry.WithJitter(500*time.Millisecond)).Retry(func() error {
-		var versions *machineapi.VersionReply
+		var versions *machineapi.VersionResponse
 
 		versions, err = client.Version(ctx)
 		if err != nil {
 			return retry.ExpectedError(err)
 		}
 
-		version = versions.Response[0].Version
+		version = versions.Messages[0].Version
 
 		return nil
 	})
@@ -368,7 +368,7 @@ func streamLogs(ctx context.Context, client *client.Client, node corev1.Node) er
 	}
 
 	for {
-		var data *common.DataResponse
+		var data *common.Data
 		data, err = stream.Recv()
 		if err != nil {
 			if err == io.EOF || status.Code(err) == codes.Canceled {
