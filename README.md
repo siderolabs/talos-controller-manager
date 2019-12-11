@@ -9,7 +9,7 @@ kubectl label node -l node-role.kubernetes.io/worker='' v1alpha1.upgrade.talos.d
 
 ```bash
 export TOKEN=<token>
-cat <<EOF >./hack/config/env.yaml
+cat <<EOF >./hack/config/examples/env.yaml
 apiVersion: apps/v1
 kind: DaemonSet
 metadata:
@@ -26,7 +26,7 @@ EOF
 ```
 
 ```bash
-make deploy
+kubectl apply -k ./hack/config/examples
 ```
 
 ```bash
@@ -34,14 +34,5 @@ kubectl get pods -n talos-system
 ```
 
 ```bash
-kubectl apply -f hack/config/examples/pool.yaml
-```
-
-```bash
 kubectl logs -n talos-system -f $(kubectl get lease -n talos-system talos-controller-manager -o jsonpath='{.spec.holderIdentity}')
 ```
-
-## TODO
-
-- Upgrade window
-- Explicit version (takes precedence over `channel`)
