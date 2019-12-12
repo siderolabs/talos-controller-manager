@@ -68,7 +68,7 @@ func (r *PoolReconciler) reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 	if time.Until(pool.Status.NextRun.Time) > pool.Spec.CheckInterval.Duration {
 		r.Log.Info("rescheduling next run to checkInterval duration", "checkinterval", pool.Spec.CheckInterval.Duration)
 
-		pool.Status.NextRun = metav1.NewTime(time.Now().Add(pool.Spec.CheckInterval.Duration))
+		pool.Status.NextRun = metav1.NewTime(time.Now().UTC().Add(pool.Spec.CheckInterval.Duration))
 
 		if err := r.Update(context.TODO(), &pool); err != nil {
 			return r.Result(ctx, req, false), err
@@ -77,7 +77,7 @@ func (r *PoolReconciler) reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 		return ctrl.Result{RequeueAfter: pool.Spec.CheckInterval.Duration}, nil
 	}
 
-	if pool.Status.NextRun.Time.After(time.Now()) {
+	if pool.Status.NextRun.Time.After(time.Now().UTC()) {
 		r.Log.Info("skipping reconciliation, next run is in the future", "pool", pool.Name)
 		return ctrl.Result{RequeueAfter: pool.Spec.CheckInterval.Duration}, nil
 	}
@@ -198,7 +198,7 @@ func (r *PoolReconciler) Result(ctx context.Context, req ctrl.Request, fail bool
 		return ctrl.Result{}
 	}
 
-	next := metav1.NewTime(time.Now().Add(pool.Spec.CheckInterval.Duration))
+	next := metav1.NewTime(time.Now().UTC().Add(pool.Spec.CheckInterval.Duration))
 
 	defer func() {
 		if err := r.Update(ctx, &pool); err != nil {
