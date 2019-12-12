@@ -71,7 +71,7 @@ func (r *PoolReconciler) reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 	}
 
 	if pool.Status.NextRun.Time.After(time.Now()) {
-		r.Log.Info("skipping reconciliation, next run is in the future", "pool", pool.Spec.Name)
+		r.Log.Info("skipping reconciliation, next run is in the future", "pool", pool.Name)
 		return ctrl.Result{RequeueAfter: pool.Spec.CheckInterval.Duration}, nil
 	}
 
@@ -106,7 +106,7 @@ func (r *PoolReconciler) reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 			return r.Result(ctx, req, false), fmt.Errorf("no version found for %q channel", pool.Spec.Channel)
 		}
 
-		r.Log.Info("obtained version for pool", "version", v, "pool", pool.Spec.Name, "channel", pool.Spec.Channel)
+		r.Log.Info("obtained version for pool", "version", v, "pool", pool.Name, "channel", pool.Spec.Channel)
 	}
 
 	c := &upgrader.Context{
@@ -121,7 +121,7 @@ func (r *PoolReconciler) reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 		Concurrency: pool.Spec.Concurrency,
 	}
 
-	label, err := labels.NewRequirement(constants.V1Alpha1PoolLabel, selection.Equals, []string{pool.Spec.Name})
+	label, err := labels.NewRequirement(constants.V1Alpha1PoolLabel, selection.Equals, []string{pool.Name})
 	if err != nil {
 		return r.Result(ctx, req, false), err
 	}
@@ -158,7 +158,7 @@ func (r *PoolReconciler) reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 	}
 
 	if len(nodesInProgess.Items) > 0 {
-		r.Log.Info("pool has upgrades in progress", "count", len(nodesInProgess.Items), "pool", pool.Spec.Name, "channel", pool.Spec.Channel)
+		r.Log.Info("pool has upgrades in progress", "count", len(nodesInProgess.Items), "pool", pool.Name, "channel", pool.Spec.Channel)
 		if err := policy.Run(nodesInProgess, v); err != nil {
 			r.Log.Error(err, "upgrade failed")
 		}
@@ -192,7 +192,7 @@ func (r *PoolReconciler) Result(ctx context.Context, req ctrl.Request, fail bool
 
 	defer func() {
 		if err := r.Update(ctx, &pool); err != nil {
-			r.Log.Info("failed to update pool", "pool", pool.Spec.Name)
+			r.Log.Info("failed to update pool", "pool", pool.Name)
 		}
 	}()
 
@@ -201,7 +201,7 @@ func (r *PoolReconciler) Result(ctx context.Context, req ctrl.Request, fail bool
 		case "Pause":
 			pool.Status.NextRun = metav1.Time{}
 
-			r.Log.Info("pausing upgrades", "pool", pool.Spec.Name)
+			r.Log.Info("pausing upgrades", "pool", pool.Name)
 
 			return ctrl.Result{Requeue: false}
 		case "Retry":
@@ -211,7 +211,7 @@ func (r *PoolReconciler) Result(ctx context.Context, req ctrl.Request, fail bool
 
 	pool.Status.NextRun = next
 
-	r.Log.Info("requeuing upgrade", "when", next.Time, "pool", pool.Spec.Name)
+	r.Log.Info("requeuing upgrade", "when", next.Time, "pool", pool.Name)
 
 	return ctrl.Result{RequeueAfter: pool.Spec.CheckInterval.Duration}
 }

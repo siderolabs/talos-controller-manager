@@ -12,7 +12,6 @@ import (
 
 // PoolSpec defines the desired state of Pool
 type PoolSpec struct {
-	Name          string           `json:"name,omitempty"`
 	Channel       string           `json:"channel,omitempty"`
 	Version       string           `json:"version,omitempty"`
 	Registry      string           `json:"registry,omitempty"`
