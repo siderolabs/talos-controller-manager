@@ -1,10 +1,9 @@
 apiVersion: upgrade.talos.dev/v1alpha1
 kind: Pool
 metadata:
-  name: control-plane-example
+  name: serial-latest
   namespace: talos-system
 spec:
-  name: serial-latest
   channel: latest
   registry: https://registry-1.docker.io
   repository: autonomy/installer
@@ -15,10 +14,9 @@ spec:
 apiVersion: upgrade.talos.dev/v1alpha1
 kind: Pool
 metadata:
-  name: workers-example
+  name: concurrent-latest
   namespace: talos-system
 spec:
-  name: concurrent-latest
   channel: latest
   registry: https://registry-1.docker.io
   repository: autonomy/installer
