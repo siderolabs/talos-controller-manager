@@ -1,57 +1,63 @@
-SHA ?= $(shell gitmeta git sha)
-TAG ?= $(shell gitmeta image tag)
-BRANCH ?= $(shell gitmeta git branch)
+REGISTRY ?= docker.io
+USERNAME ?= autonomy
+SHA ?= $(shell git describe --match=none --always --abbrev=8 --dirty)
+TAG ?= $(shell git describe --tag --always --dirty)
+BRANCH ?= $(shell git rev-parse --abbrev-ref HEAD)
+REGISTRY_AND_USERNAME := $(REGISTRY)/$(USERNAME)
 
-COMMON_ARGS = --progress=plain
-COMMON_ARGS += --frontend=dockerfile.v0
-COMMON_ARGS += --local context=.
-COMMON_ARGS += --local dockerfile=.
-COMMON_ARGS += --opt build-arg:TAG=$(TAG)
+ARTIFACTS := _out
 
-BUILDKIT_HOST ?= tcp://0.0.0.0:1234
-
-ifeq ($(PUSH),true)
-PUSH_ARGS = ,push=true
-else
-PUSH_ARGS =
-endif
+BUILD := docker buildx build
+PLATFORM ?= linux/amd64
+PROGRESS ?= auto
+PUSH ?= false
+COMMON_ARGS := --file=Dockerfile
+COMMON_ARGS += --progress=$(PROGRESS)
+COMMON_ARGS += --platform=$(PLATFORM)
+COMMON_ARGS += --push=$(PUSH)
 
 all: manifests container
 
-.PHONY: generate
-generate: # Generate code.
-	buildctl --addr $(BUILDKIT_HOST) \
-		build \
-		--output type=local,dest=. \
-		--opt target=$@ \
-		$(COMMON_ARGS)
+.PHONY: help
+help: ## This help menu.
+	@grep -E '^[a-zA-Z%_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-30s\033[0m %s\n", $$1, $$2}'
 
-container: generate # Build a container image.
-	@mkdir -p ./build
-	buildctl --addr $(BUILDKIT_HOST) \
-		build \
-		--output type=image,name=docker.io/autonomy/talos-controller-manager:$(TAG)$(PUSH_ARGS) \
-		--opt target=$@ \
-		$(COMMON_ARGS)
+target-%: ## Builds the specified target defined in the Dockerfile. The build result will only remain in the build cache.
+	@$(BUILD) \
+		--target=$* \
+		$(COMMON_ARGS) \
+		$(TARGET_ARGS) .
+
+local-%: ## Builds the specified target defined in the Dockerfile using the local output type. The build result will be output to the specified local destination.
+	@$(MAKE) target-$* TARGET_ARGS="--output=type=local,dest=$(DEST) $(TARGET_ARGS)"
+
+docker-%: ## Builds the specified target defined in the Dockerfile using the docker output type. The build result will be loaded into docker.
+	@$(MAKE) target-$* TARGET_ARGS="--tag $(REGISTRY_AND_USERNAME)/talos-controller-manager:$(TAG) $(TARGET_ARGS)"
+
+.PHONY: generate
+generate: ## Generates source code from protobuf definitions.
+	@$(MAKE) local-$@ DEST=./
+
+.PHONY: container
+container: generate ## Build a container image.
+	@$(MAKE) docker-$@
 
 .PHONY: manifests
-manifests: # Generate manifests e.g. CRD, RBAC etc.
-	buildctl --addr $(BUILDKIT_HOST) \
-		build \
-		--output type=local,dest=. \
-		--opt target=$@ \
-		$(COMMON_ARGS)
+manifests: ## Generate manifests (e.g. CRD, RBAC, etc.).
+	@$(MAKE) local-$@ DEST=./
 
-release: manifests container
-	@mkdir -p ./build
-	buildctl --addr $(BUILDKIT_HOST) \
-		build \
-		--output type=local,dest=./build \
-		--opt target=$@ \
-		$(COMMON_ARGS)
+.PHONY: release
+release: manifests container ## Create the release YAML. The build result will be ouput to the specified local destination.
+	@$(MAKE) local-$@ DEST=./$(ARTIFACTS)
 
-deploy: manifests # Deploy to a cluster.
+.PHONY: deploy
+deploy: manifests ## Deploy to a cluster. This is for testing purposes only.
 	kubectl apply -k hack/config
 
-destroy: # Remove from a cluster.
+.PHONY: destroy
+destroy: ## Remove from a cluster. This is for testing purposes only.
 	kubectl delete -k hack/config
+
+.PHONY: clean
+clean:
+	@rm -rf $(ARTIFACTS)
