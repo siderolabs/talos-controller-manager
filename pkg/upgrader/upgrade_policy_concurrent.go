@@ -5,16 +5,18 @@
 package upgrader
 
 import (
-	"log"
-
+	"github.com/go-logr/logr"
 	"github.com/hashicorp/go-multierror"
 	corev1 "k8s.io/api/core/v1"
+	ctrl "sigs.k8s.io/controller-runtime"
 )
 
 type ConcurrentPolicy struct {
 	Upgrader
 
 	Concurrency int
+
+	log logr.Logger
 }
 
 type Job struct {
@@ -25,6 +27,14 @@ type Job struct {
 type Result struct {
 	job Job
 	err error
+}
+
+func NewConcurrentPolicy(u Upgrader, c int) ConcurrentPolicy {
+	return ConcurrentPolicy{
+		Upgrader:    u,
+		Concurrency: c,
+		log:         ctrl.Log.WithName("policy").WithName("Concurrent"),
+	}
 }
 
 func (policy ConcurrentPolicy) Run(nodes corev1.NodeList, version string) error {
@@ -55,7 +65,7 @@ func (policy ConcurrentPolicy) Run(nodes corev1.NodeList, version string) error 
 
 func (policy ConcurrentPolicy) worker(id int, jobs <-chan Job, results chan<- Result) {
 	for j := range jobs {
-		log.Println("concurrent policy worker", id, "assigned to node", j.node.Name)
+		policy.log.Info("assigned worker to node", "id", id, "node", j.node.Name)
 
 		if err := policy.Upgrade(j.node, j.version); err != nil {
 			results <- Result{j, err}

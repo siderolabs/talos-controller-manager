@@ -129,10 +129,7 @@ func (r *PoolReconciler) reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 
 	u := upgrader.NewV1Alpha1(c, pool.Spec.Registry, pool.Spec.Repository)
 
-	policy := upgrader.ConcurrentPolicy{
-		Upgrader:    u,
-		Concurrency: pool.Spec.Concurrency,
-	}
+	policy := upgrader.NewConcurrentPolicy(u, pool.Spec.Concurrency)
 
 	label, err := labels.NewRequirement(constants.V1Alpha1PoolLabel, selection.Equals, []string{pool.Name})
 	if err != nil {
