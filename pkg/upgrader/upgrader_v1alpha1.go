@@ -11,12 +11,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"net"
 	"os"
 	"strings"
 	"time"
 
+	"github.com/go-logr/logr"
 	"github.com/pkg/errors"
 	poolv1alpha1 "github.com/talos-systems/talos-controller-manager/api/v1alpha1"
 	"github.com/talos-systems/talos-controller-manager/pkg/constants"
@@ -47,6 +47,7 @@ type V1Alpha1 struct {
 	registry   string
 	repository string
 	c          *Context
+	log        logr.Logger
 }
 
 type Context struct {
@@ -59,6 +60,7 @@ func NewV1Alpha1(c *Context, registry, repository string) *V1Alpha1 {
 		registry:   registry,
 		repository: repository,
 		c:          c,
+		log:        ctrl.Log.WithName("v1alpha1").WithName("Upgrader"),
 	}
 }
 
@@ -166,20 +168,21 @@ func (v1alpha1 V1Alpha1) Upgrade(node corev1.Node, tag string) (err error) {
 	case !upToDate && inProgess:
 		// See above case.
 	case upToDate && !inProgess:
-		log.Printf("node %q is up to date: %s", node.Name, version.Tag)
+		v1alpha1.log.Info("node is up to date", "node", node.Name, "version", version.Tag)
 		return nil
 	case !upToDate && !inProgess:
-		log.Printf("upgrading node %q from %q to %q via %q", node.Name, version.Tag, tag, image)
+		v1alpha1.log.Info("upgrading node", "node", node.Name, "current version", version.Tag, "target version", tag, "installer", image)
 
-		log.Printf("adding annotation to %q", node.Name)
 		if err = annotate(node, config, false); err != nil {
 			return err
 		}
 
+		v1alpha1.log.Info("added annotation", "node", node.Name, "annotation", constants.InProgressAnnotation)
+
 		// TODO(andrewrynhard): Remove this.
 		time.Sleep(5 * time.Second)
 
-		log.Printf("sending upgrade request to %q", node.Name)
+		v1alpha1.log.Info("sending upgrade request", "node", node.Name)
 		_, err = c.Upgrade(ctx, image)
 		if err != nil {
 			return fmt.Errorf("upgrade request failed: %w", err)
@@ -196,21 +199,21 @@ func (v1alpha1 V1Alpha1) Upgrade(node corev1.Node, tag string) (err error) {
 
 	// TODO(andrewrynhard): Reconnect and stream logs on error.
 	// nolint: errcheck
-	go streamLogs(logCtx, c, node)
+	go v1alpha1.streamLogs(logCtx, c, node)
 
-	if err = verifyUpgrade(c, config, tag, node); err != nil {
+	if err = v1alpha1.verifyUpgrade(c, config, tag, node); err != nil {
 		return err
 	}
 
-	if err = cleanup(h, config, node); err != nil {
+	if err = v1alpha1.cleanup(h, config, node); err != nil {
 		return err
 	}
 
 	if err = v1alpha1.removeInProgress(node.Name); err != nil {
-		log.Println("WARNING: failed to remove node from pool in progress status:", err)
+		v1alpha1.log.Error(err, "failed to remove node from pool in progress status")
 	}
 
-	log.Printf("upgrade of node %q to %q finished successfully", node.Name, tag)
+	v1alpha1.log.Info("upgrade successful", "node", node.Name, "version", tag)
 
 	return nil
 }
@@ -305,13 +308,11 @@ func waitForHealthy(node corev1.Node, config *restclient.Config) (err error) {
 		err = retry.Constant(15*time.Minute, retry.WithUnits(3*time.Second), retry.WithJitter(500*time.Millisecond)).Retry(func() error {
 			clientset, err := kubernetes.NewForConfig(config)
 			if err != nil {
-				log.Println(err)
 				return retry.ExpectedError(err)
 			}
 
 			n, err := clientset.CoreV1().Nodes().Get(node.Name, metav1.GetOptions{})
 			if err != nil {
-				log.Println(err)
 				return retry.ExpectedError(err)
 			}
 
@@ -361,10 +362,10 @@ func getVersion(ctx context.Context, client *client.Client) (version *machineapi
 	return version, nil
 }
 
-func streamLogs(ctx context.Context, client *client.Client, node corev1.Node) error {
+func (v1alpha1 *V1Alpha1) streamLogs(ctx context.Context, client *client.Client, node corev1.Node) error {
 	stream, err := client.Logs(ctx, "system", common.ContainerDriver_CONTAINERD, "machined", true)
 	if err != nil {
-		log.Printf("error fetching logs: %s", err)
+		v1alpha1.log.Error(err, "error fetching logs")
 	}
 
 	for {
@@ -375,7 +376,7 @@ func streamLogs(ctx context.Context, client *client.Client, node corev1.Node) er
 				return nil
 			}
 
-			log.Printf("error streaming logs: %s", err)
+			v1alpha1.log.Error(err, "error streaming logs")
 
 			return err
 		}
@@ -384,28 +385,28 @@ func streamLogs(ctx context.Context, client *client.Client, node corev1.Node) er
 
 		scanner := bufio.NewScanner(r)
 		for scanner.Scan() {
-			log.Printf("%s: %s", node.Name, scanner.Text())
+			v1alpha1.log.Info("upgrade log", "node", node.Name, "log", scanner.Text())
 		}
 	}
 }
 
-func cleanup(h *taloskubernetes.Client, config *restclient.Config, node corev1.Node) (err error) {
+func (v1alpha1 *V1Alpha1) cleanup(h *taloskubernetes.Client, config *restclient.Config, node corev1.Node) (err error) {
 	if err = h.Uncordon(node.Name); err != nil {
-		log.Printf("warning: failed to undordon %q: %v", node.Name, err)
+		v1alpha1.log.Error(err, "failed to undordon node", "node", node.Name)
 	}
 
-	log.Printf("uncordoned node %q", node.Name)
+	v1alpha1.log.Info("node uncordoned", "node", node.Name)
 
 	if err = annotate(node, config, true); err != nil {
 		return err
 	}
 
-	log.Printf("removed annotation from %q", node.Name)
+	v1alpha1.log.Info("removed annotation", "node", node.Name, "annotation", constants.InProgressAnnotation)
 
 	return nil
 }
 
-func verifyUpgrade(client *client.Client, config *restclient.Config, tag string, node corev1.Node) error {
+func (v1alpha1 *V1Alpha1) verifyUpgrade(client *client.Client, config *restclient.Config, tag string, node corev1.Node) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
 	for {
@@ -423,7 +424,7 @@ func verifyUpgrade(client *client.Client, config *restclient.Config, tag string,
 			return fmt.Errorf("node is not healthy: %w", err)
 		}
 
-		log.Printf("node %q is healthy", node.Name)
+		v1alpha1.log.Info("node is healthy", "node", node.Name)
 
 		return nil
 	}
