@@ -67,6 +67,13 @@ func (r *PoolReconciler) reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 
 	if time.Until(pool.Status.NextRun.Time) > pool.Spec.CheckInterval.Duration {
 		r.Log.Info("rescheduling next run to checkInterval duration", "checkinterval", pool.Spec.CheckInterval.Duration)
+
+		pool.Status.NextRun = metav1.NewTime(time.Now().Add(pool.Spec.CheckInterval.Duration))
+
+		if err := r.Update(context.TODO(), &pool); err != nil {
+			return r.Result(ctx, req, false), err
+		}
+
 		return ctrl.Result{RequeueAfter: pool.Spec.CheckInterval.Duration}, nil
 	}
 
