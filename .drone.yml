@@ -1,4 +1,12 @@
 ---
+kind: secret
+name: kubeconfig
+
+get:
+  path: buildx
+  name: kubeconfig
+
+---
 kind: pipeline
 name: default
 
@@ -18,17 +26,29 @@ services:
         path: /var/run
 
 steps:
-  - name: git-fetch-tags
-    image: docker:git
+  - name: setup-ci
+    image: autonomy/build-container:latest
     commands:
       - git fetch --tags
+      - apk add coreutils
+      - echo -e "$BUILDX_KUBECONFIG" > /root/.kube/config
+      - docker buildx create --driver kubernetes --driver-opt replicas=2 --driver-opt namespace=ci --driver-opt image=moby/buildkit:v0.6.2 --name ci --buildkitd-flags="--allow-insecure-entitlement security.insecure" --use
+      - docker buildx inspect --bootstrap
+    environment:
+      BUILDX_KUBECONFIG:
+        from_secret: kubeconfig
+    privileged: true
+    volumes:
+      - name: dockersock
+        path: /var/run
+      - name: docker
+        path: /root/.docker/buildx
+      - name: kube
+        path: /root/.kube
 
   - name: build-pull-request
     image: autonomy/build-container:latest
     pull: always
-    environment:
-      BINDIR: /usr/local/bin
-      BUILDKIT_HOST: ${BUILDKIT_HOST=tcp://buildkitd.ci.svc:1234}
     commands:
       - make
     when:
@@ -36,8 +56,12 @@ steps:
         include:
           - pull_request
     volumes:
-      - name: docker-socket
+      - name: dockersock
         path: /var/run
+      - name: docker
+        path: /root/.docker/buildx
+      - name: kube
+        path: /root/.kube
 
   - name: build-and-publish
     image: autonomy/build-container:latest
@@ -47,8 +71,6 @@ steps:
         from_secret: docker_username
       DOCKER_PASSWORD:
         from_secret: docker_password
-      BINDIR: /usr/local/bin
-      BUILDKIT_HOST: ${BUILDKIT_HOST=tcp://buildkitd.ci.svc:1234}
     commands:
       - docker login --username "$${DOCKER_USERNAME}" --password "$${DOCKER_PASSWORD}"
       - make PUSH=true
@@ -57,23 +79,28 @@ steps:
         exclude:
           - pull_request
     volumes:
-      - name: docker-socket
+      - name: dockersock
         path: /var/run
+      - name: docker
+        path: /root/.docker/buildx
+      - name: kube
+        path: /root/.kube
 
   - name: build-yaml
     image: autonomy/build-container:latest
     pull: always
-    environment:
-      BINDIR: /usr/local/bin
-      BUILDKIT_HOST: ${BUILDKIT_HOST=tcp://buildkitd.ci.svc:1234}
     commands:
       - make release
     when:
       event:
         - tag
     volumes:
-      - name: docker-socket
+      - name: dockersock
         path: /var/run
+      - name: docker
+        path: /root/.docker/buildx
+      - name: kube
+        path: /root/.kube
 
   - name: release
     image: plugins/github-release
@@ -85,13 +112,17 @@ steps:
         - sha512
       draft: true
       files:
-        - build/*
+        - _out/*
     when:
       event:
         - tag
 
 volumes:
   - name: docker-socket
+    temp: {}
+  - name: docker
+    temp: {}
+  - name: kube
     temp: {}
 ---
 kind: pipeline
