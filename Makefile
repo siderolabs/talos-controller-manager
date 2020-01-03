@@ -14,7 +14,6 @@ PUSH ?= false
 COMMON_ARGS := --file=Dockerfile
 COMMON_ARGS += --progress=$(PROGRESS)
 COMMON_ARGS += --platform=$(PLATFORM)
-COMMON_ARGS += --push=$(PUSH)
 
 all: manifests container
 
@@ -40,7 +39,7 @@ generate: ## Generates source code from protobuf definitions.
 
 .PHONY: container
 container: generate ## Build a container image.
-	@$(MAKE) docker-$@
+	@$(MAKE) docker-$@ TARGET_ARGS="--push=$(PUSH)"
 
 .PHONY: manifests
 manifests: ## Generate manifests (e.g. CRD, RBAC, etc.).
