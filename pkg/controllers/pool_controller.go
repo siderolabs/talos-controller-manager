@@ -114,6 +114,12 @@ func (r *PoolReconciler) reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 		}
 
 		r.Log.Info("obtained version for pool", "version", v, "pool", pool.Name, "channel", pool.Spec.Channel)
+
+		pool.Status.Version = v
+
+		if err := r.Update(context.TODO(), &pool); err != nil {
+			return r.Result(ctx, req, false), err
+		}
 	}
 
 	c := &upgrader.Context{
