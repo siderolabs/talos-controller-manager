@@ -202,7 +202,7 @@ func (r *PoolReconciler) Result(ctx context.Context, req ctrl.Request, fail bool
 
 	defer func() {
 		if err := r.Update(ctx, &pool); err != nil {
-			r.Log.Info("failed to update pool", "pool", pool.Name)
+			r.Log.Error(err, "failed to update pool", "pool", pool.Name)
 		}
 	}()
 
