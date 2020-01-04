@@ -363,7 +363,7 @@ func getVersion(ctx context.Context, client *client.Client) (version *machineapi
 }
 
 func (v1alpha1 *V1Alpha1) streamLogs(ctx context.Context, client *client.Client, node corev1.Node) error {
-	stream, err := client.Logs(ctx, "system", common.ContainerDriver_CONTAINERD, "machined", true)
+	stream, err := client.Logs(ctx, "system", common.ContainerDriver_CONTAINERD, "machined", true, 0)
 	if err != nil {
 		v1alpha1.log.Error(err, "error fetching logs")
 	}
