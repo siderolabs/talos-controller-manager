@@ -148,7 +148,7 @@ func (v1alpha1 V1Alpha1) Upgrade(node corev1.Node, tag string) (err error) {
 	// TODO(andrewrynhard): Request upgrade with context timeout.
 	ctx := context.TODO()
 
-	version, err := getVersion(ctx, c)
+	version, err := getVersion(ctx, c, 2*time.Minute)
 	if err != nil {
 		return err
 	}
@@ -341,8 +341,8 @@ func waitForHealthy(node corev1.Node, config *restclient.Config) (err error) {
 	return nil
 }
 
-func getVersion(ctx context.Context, client *client.Client) (version *machineapi.VersionInfo, err error) {
-	err = retry.Constant(15*time.Minute, retry.WithUnits(3*time.Second), retry.WithJitter(500*time.Millisecond)).Retry(func() error {
+func getVersion(ctx context.Context, client *client.Client, timeout time.Duration) (version *machineapi.VersionInfo, err error) {
+	err = retry.Constant(timeout, retry.WithUnits(3*time.Second), retry.WithJitter(500*time.Millisecond)).Retry(func() error {
 		var versions *machineapi.VersionResponse
 
 		versions, err = client.Version(ctx)
@@ -410,7 +410,7 @@ func (v1alpha1 *V1Alpha1) verifyUpgrade(client *client.Client, config *restclien
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
 	for {
-		version, err := getVersion(ctx, client)
+		version, err := getVersion(ctx, client, 15*time.Minute)
 		if err != nil {
 			return err
 		}
