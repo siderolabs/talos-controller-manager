@@ -6,8 +6,9 @@ package upgrader
 
 import (
 	corev1 "k8s.io/api/core/v1"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
 type Upgrader interface {
-	Upgrade(corev1.Node, string) error
+	Upgrade(reconcile.Request, corev1.Node, string) error
 }

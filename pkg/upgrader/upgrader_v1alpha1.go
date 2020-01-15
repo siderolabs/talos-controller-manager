@@ -25,8 +25,7 @@ import (
 	machineapi "github.com/talos-systems/talos/api/machine"
 	"github.com/talos-systems/talos/cmd/osctl/pkg/client"
 	talosconstants "github.com/talos-systems/talos/pkg/constants"
-	"github.com/talos-systems/talos/pkg/crypto/x509"
-	"github.com/talos-systems/talos/pkg/grpc/gen"
+	"github.com/talos-systems/talos/pkg/grpc/tls"
 	taloskubernetes "github.com/talos-systems/talos/pkg/kubernetes"
 	"github.com/talos-systems/talos/pkg/retry"
 	"google.golang.org/grpc/codes"
@@ -36,62 +35,39 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/strategicpatch"
-	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	restclient "k8s.io/client-go/rest"
 	ctrl "sigs.k8s.io/controller-runtime"
 	ctrlclient "sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
 type V1Alpha1 struct {
-	registry   string
-	repository string
-	c          *Context
-	log        logr.Logger
+	log         logr.Logger
+	ctrlclient  ctrlclient.Client
+	talosclient *client.Client
+	kubeclient  *taloskubernetes.Client
 }
 
-type Context struct {
-	Client ctrlclient.Client
-	Req    ctrl.Request
-}
-
-func NewV1Alpha1(c *Context, registry, repository string) *V1Alpha1 {
-	return &V1Alpha1{
-		registry:   registry,
-		repository: repository,
-		c:          c,
-		log:        ctrl.Log.WithName("v1alpha1").WithName("Upgrader"),
-	}
-}
-
-func (v1alpha1 V1Alpha1) Upgrade(node corev1.Node, tag string) (err error) {
+func NewV1Alpha1(ctrlclient ctrlclient.Client) (v *V1Alpha1, err error) {
 	var config *restclient.Config
 
 	config, err = rest.InClusterConfig()
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	h, err := taloskubernetes.NewForConfig(config)
+	kubeclient, err := taloskubernetes.NewForConfig(config)
 	if err != nil {
-		return fmt.Errorf("failed to create client: %w", err)
+		return nil, fmt.Errorf("failed to create client: %w", err)
 	}
 
 	var endpoints []string
 
-	endpoints, err = h.MasterIPs()
+	endpoints, err = kubeclient.MasterIPs()
 	if err != nil {
-		return err
+		return nil, err
 	}
-
-	if v1alpha1.repository == "" {
-		return errors.New("a repository is required")
-	}
-
-	// TODO(andrewrynhard): This should be passed in.
-	image := fmt.Sprintf("docker.io/%s:%s", v1alpha1.repository, tag)
-
-	var generator *gen.RemoteGenerator
 
 	var (
 		token string
@@ -99,36 +75,67 @@ func (v1alpha1 V1Alpha1) Upgrade(node corev1.Node, tag string) (err error) {
 	)
 
 	if token, ok = os.LookupEnv("TALOS_TOKEN"); !ok {
-		return errors.New("TALOS_TOKEN env var is required")
+		return nil, errors.New("TALOS_TOKEN env var is required")
 	}
-
-	generator, err = gen.NewRemoteGenerator(token, endpoints, talosconstants.TrustdPort)
-	if err != nil {
-		return errors.Wrap(err, "failed to create trustd client")
-	}
-
-	var (
-		csr      *x509.CertificateSigningRequest
-		identity *x509.PEMEncodedCertificateAndKey
-	)
 
 	hostname, err := os.Hostname()
 	if err != nil {
-		return err
+		return nil, err
 	}
-	csr, identity, err = x509.NewCSRAndIdentity([]string{hostname}, []net.IP{})
+
+	certificateProvider, err := tls.NewRemoteRenewingFileCertificateProvider(
+		token,
+		endpoints,
+		talosconstants.TrustdPort,
+		[]string{hostname},
+		[]net.IP{},
+	)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	ca, crt, err := generator.Identity(csr)
+	ca, err := certificateProvider.GetCA()
 	if err != nil {
+		return nil, fmt.Errorf("failed to get root CA: %w", err)
+	}
+
+	creds, err := tls.New(
+		tls.WithClientAuthType(tls.Mutual),
+		tls.WithCACertPEM(ca),
+		tls.WithClientCertificateProvider(certificateProvider),
+	)
+
+	talosclient, err := client.NewClient(creds, endpoints, talosconstants.ApidPort)
+	if err != nil {
+		return nil, fmt.Errorf("error constructing client: %w", err)
+	}
+
+	v = &V1Alpha1{
+		log:         ctrl.Log.WithName("v1alpha1").WithName("Upgrader"),
+		ctrlclient:  ctrlclient,
+		talosclient: talosclient,
+		kubeclient:  kubeclient,
+	}
+
+	return v, nil
+}
+
+func (v1alpha1 V1Alpha1) Upgrade(req reconcile.Request, node corev1.Node, tag string) (err error) {
+	var pool poolv1alpha1.Pool
+	if err := v1alpha1.ctrlclient.Get(context.Background(), req.NamespacedName, &pool); err != nil {
+		if apierrors.IsNotFound(err) {
+			return nil
+		}
+
 		return err
 	}
 
-	identity.Crt = crt
+	if pool.Spec.Repository == "" {
+		return errors.New("a repository is required")
+	}
 
-	creds := client.NewClientCredentials(ca, identity.Crt, identity.Key)
+	// TODO(andrewrynhard): This should be passed in.
+	image := fmt.Sprintf("docker.io/%s:%s", pool.Spec.Repository, tag)
 
 	// TODO(andrewrynhard): Ensure that we have found the internal address.
 	var target string
@@ -138,17 +145,10 @@ func (v1alpha1 V1Alpha1) Upgrade(node corev1.Node, tag string) (err error) {
 		}
 	}
 
-	c, err := client.NewClient(creds, []string{target}, talosconstants.ApidPort)
-	if err != nil {
-		return fmt.Errorf("error constructing client: %w", err)
-	}
-	// nolint: errcheck
-	defer c.Close()
-
 	// TODO(andrewrynhard): Request upgrade with context timeout.
-	ctx := context.TODO()
+	ctx := client.WithNodes(context.Background(), target)
 
-	version, err := getVersion(ctx, c)
+	version, err := v1alpha1.getVersion(ctx)
 	if err != nil {
 		return err
 	}
@@ -173,7 +173,7 @@ func (v1alpha1 V1Alpha1) Upgrade(node corev1.Node, tag string) (err error) {
 	case !upToDate && !inProgess:
 		v1alpha1.log.Info("upgrading node", "node", node.Name, "current version", version.Tag, "target version", tag, "installer", image)
 
-		if err = annotate(node, config, false); err != nil {
+		if err = v1alpha1.annotate(node, false); err != nil {
 			return err
 		}
 
@@ -183,12 +183,13 @@ func (v1alpha1 V1Alpha1) Upgrade(node corev1.Node, tag string) (err error) {
 		time.Sleep(5 * time.Second)
 
 		v1alpha1.log.Info("sending upgrade request", "node", node.Name)
-		_, err = c.Upgrade(ctx, image)
+
+		_, err = v1alpha1.talosclient.Upgrade(ctx, image)
 		if err != nil {
 			return fmt.Errorf("upgrade request failed: %w", err)
 		}
 
-		if err = v1alpha1.setInProgress(node.Name); err != nil {
+		if err = v1alpha1.setInProgress(req, node.Name); err != nil {
 			return err
 		}
 	}
@@ -199,17 +200,17 @@ func (v1alpha1 V1Alpha1) Upgrade(node corev1.Node, tag string) (err error) {
 
 	// TODO(andrewrynhard): Reconnect and stream logs on error.
 	// nolint: errcheck
-	go v1alpha1.streamLogs(logCtx, c, node)
+	go v1alpha1.streamLogs(logCtx, node)
 
-	if err = v1alpha1.verifyUpgrade(c, config, tag, node); err != nil {
+	if err = v1alpha1.verifyUpgrade(ctx, tag, node); err != nil {
 		return err
 	}
 
-	if err = v1alpha1.cleanup(h, config, node); err != nil {
+	if err = v1alpha1.cleanup(node); err != nil {
 		return err
 	}
 
-	if err = v1alpha1.removeInProgress(node.Name); err != nil {
+	if err = v1alpha1.removeInProgress(req, node.Name); err != nil {
 		v1alpha1.log.Error(err, "failed to remove node from pool in progress status")
 	}
 
@@ -218,9 +219,9 @@ func (v1alpha1 V1Alpha1) Upgrade(node corev1.Node, tag string) (err error) {
 	return nil
 }
 
-func (v1alpha1 *V1Alpha1) setInProgress(name string) error {
+func (v1alpha1 *V1Alpha1) setInProgress(req reconcile.Request, name string) error {
 	var pool poolv1alpha1.Pool
-	if err := v1alpha1.c.Client.Get(context.Background(), v1alpha1.c.Req.NamespacedName, &pool); err != nil {
+	if err := v1alpha1.ctrlclient.Get(context.Background(), req.NamespacedName, &pool); err != nil {
 		if apierrors.IsNotFound(err) {
 			return nil
 		}
@@ -235,16 +236,16 @@ func (v1alpha1 *V1Alpha1) setInProgress(name string) error {
 	nodes := strings.FieldsFunc(pool.Status.InProgress, f)
 	nodes = append(nodes, name)
 	pool.Status.InProgress = strings.Join(nodes, ",")
-	if err := v1alpha1.c.Client.Update(context.TODO(), &pool); err != nil {
+	if err := v1alpha1.ctrlclient.Update(context.TODO(), &pool); err != nil {
 		return err
 	}
 
 	return nil
 }
 
-func (v1alpha1 *V1Alpha1) removeInProgress(name string) error {
+func (v1alpha1 *V1Alpha1) removeInProgress(req reconcile.Request, name string) error {
 	var pool poolv1alpha1.Pool
-	if err := v1alpha1.c.Client.Get(context.Background(), v1alpha1.c.Req.NamespacedName, &pool); err != nil {
+	if err := v1alpha1.ctrlclient.Get(context.Background(), req.NamespacedName, &pool); err != nil {
 		if apierrors.IsNotFound(err) {
 			return nil
 		}
@@ -262,19 +263,14 @@ func (v1alpha1 *V1Alpha1) removeInProgress(name string) error {
 		tmp = append(tmp, node)
 	}
 	pool.Status.InProgress = strings.Join(tmp, ",")
-	if err := v1alpha1.c.Client.Update(context.TODO(), &pool); err != nil {
+	if err := v1alpha1.ctrlclient.Update(context.TODO(), &pool); err != nil {
 		return err
 	}
 
 	return nil
 }
 
-func annotate(node corev1.Node, config *restclient.Config, remove bool) (err error) {
-	clientset, err := kubernetes.NewForConfig(config)
-	if err != nil {
-		return err
-	}
-
+func (v1alpha1 *V1Alpha1) annotate(node corev1.Node, remove bool) (err error) {
 	oldData, err := json.Marshal(node)
 	if err != nil {
 		return fmt.Errorf("failed to marshal unmodified node %q into JSON: %w", node.Name, err)
@@ -298,20 +294,15 @@ func annotate(node corev1.Node, config *restclient.Config, remove bool) (err err
 		return fmt.Errorf("failed to create two way merge patch: %w", err)
 	}
 
-	_, err = clientset.CoreV1().Nodes().Patch(node.Name, types.StrategicMergePatchType, patchBytes)
+	_, err = v1alpha1.kubeclient.CoreV1().Nodes().Patch(node.Name, types.StrategicMergePatchType, patchBytes)
 
 	return err
 }
 
-func waitForHealthy(node corev1.Node, config *restclient.Config) (err error) {
+func (v1alpha1 *V1Alpha1) waitForHealthy(node corev1.Node) (err error) {
 	wait := func() error {
 		err = retry.Constant(15*time.Minute, retry.WithUnits(3*time.Second), retry.WithJitter(500*time.Millisecond)).Retry(func() error {
-			clientset, err := kubernetes.NewForConfig(config)
-			if err != nil {
-				return retry.ExpectedError(err)
-			}
-
-			n, err := clientset.CoreV1().Nodes().Get(node.Name, metav1.GetOptions{})
+			n, err := v1alpha1.kubeclient.CoreV1().Nodes().Get(node.Name, metav1.GetOptions{})
 			if err != nil {
 				return retry.ExpectedError(err)
 			}
@@ -341,11 +332,11 @@ func waitForHealthy(node corev1.Node, config *restclient.Config) (err error) {
 	return nil
 }
 
-func getVersion(ctx context.Context, client *client.Client) (version *machineapi.VersionInfo, err error) {
+func (v1alpha1 *V1Alpha1) getVersion(ctx context.Context) (version *machineapi.VersionInfo, err error) {
 	err = retry.Constant(15*time.Minute, retry.WithUnits(3*time.Second), retry.WithJitter(500*time.Millisecond)).Retry(func() error {
 		var versions *machineapi.VersionResponse
 
-		versions, err = client.Version(ctx)
+		versions, err = v1alpha1.talosclient.Version(ctx)
 		if err != nil {
 			return retry.ExpectedError(err)
 		}
@@ -362,8 +353,8 @@ func getVersion(ctx context.Context, client *client.Client) (version *machineapi
 	return version, nil
 }
 
-func (v1alpha1 *V1Alpha1) streamLogs(ctx context.Context, client *client.Client, node corev1.Node) error {
-	stream, err := client.Logs(ctx, "system", common.ContainerDriver_CONTAINERD, "machined", true, 0)
+func (v1alpha1 *V1Alpha1) streamLogs(ctx context.Context, node corev1.Node) error {
+	stream, err := v1alpha1.talosclient.Logs(ctx, "system", common.ContainerDriver_CONTAINERD, "machined", true, 0)
 	if err != nil {
 		v1alpha1.log.Error(err, "error fetching logs")
 	}
@@ -390,14 +381,14 @@ func (v1alpha1 *V1Alpha1) streamLogs(ctx context.Context, client *client.Client,
 	}
 }
 
-func (v1alpha1 *V1Alpha1) cleanup(h *taloskubernetes.Client, config *restclient.Config, node corev1.Node) (err error) {
-	if err = h.Uncordon(node.Name); err != nil {
+func (v1alpha1 *V1Alpha1) cleanup(node corev1.Node) (err error) {
+	if err = v1alpha1.kubeclient.Uncordon(node.Name); err != nil {
 		v1alpha1.log.Error(err, "failed to undordon node", "node", node.Name)
 	}
 
 	v1alpha1.log.Info("node uncordoned", "node", node.Name)
 
-	if err = annotate(node, config, true); err != nil {
+	if err = v1alpha1.annotate(node, true); err != nil {
 		return err
 	}
 
@@ -406,11 +397,11 @@ func (v1alpha1 *V1Alpha1) cleanup(h *taloskubernetes.Client, config *restclient.
 	return nil
 }
 
-func (v1alpha1 *V1Alpha1) verifyUpgrade(client *client.Client, config *restclient.Config, tag string, node corev1.Node) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+func (v1alpha1 *V1Alpha1) verifyUpgrade(ctx context.Context, tag string, node corev1.Node) error {
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Minute)
 	defer cancel()
 	for {
-		version, err := getVersion(ctx, client)
+		version, err := v1alpha1.getVersion(ctx)
 		if err != nil {
 			return err
 		}
@@ -420,7 +411,7 @@ func (v1alpha1 *V1Alpha1) verifyUpgrade(client *client.Client, config *restclien
 			continue
 		}
 
-		if err = waitForHealthy(node, config); err != nil {
+		if err = v1alpha1.waitForHealthy(node); err != nil {
 			return fmt.Errorf("node is not healthy: %w", err)
 		}
 
