@@ -9,6 +9,7 @@ import (
 	"github.com/hashicorp/go-multierror"
 	corev1 "k8s.io/api/core/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
 type ConcurrentPolicy struct {
@@ -20,6 +21,7 @@ type ConcurrentPolicy struct {
 }
 
 type Job struct {
+	req     reconcile.Request
 	node    corev1.Node
 	version string
 }
@@ -37,7 +39,7 @@ func NewConcurrentPolicy(u Upgrader, c int) ConcurrentPolicy {
 	}
 }
 
-func (policy ConcurrentPolicy) Run(nodes corev1.NodeList, version string) error {
+func (policy ConcurrentPolicy) Run(req reconcile.Request, nodes corev1.NodeList, version string) error {
 	jobs := make(chan Job, policy.Concurrency)
 	results := make(chan Result, len(nodes.Items))
 
@@ -46,7 +48,7 @@ func (policy ConcurrentPolicy) Run(nodes corev1.NodeList, version string) error 
 	}
 
 	for _, node := range nodes.Items {
-		jobs <- Job{node, version}
+		jobs <- Job{req, node, version}
 	}
 
 	close(jobs)
@@ -67,7 +69,7 @@ func (policy ConcurrentPolicy) worker(id int, jobs <-chan Job, results chan<- Re
 	for j := range jobs {
 		policy.log.Info("assigned worker to node", "id", id, "node", j.node.Name)
 
-		if err := policy.Upgrade(j.node, j.version); err != nil {
+		if err := policy.Upgrade(j.req, j.node, j.version); err != nil {
 			results <- Result{j, err}
 		}
 

@@ -13,6 +13,7 @@ import (
 
 	poolv1alpha1 "github.com/talos-systems/talos-controller-manager/api/v1alpha1"
 	"github.com/talos-systems/talos-controller-manager/pkg/controllers"
+	"github.com/talos-systems/talos-controller-manager/pkg/upgrader"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes"
@@ -133,9 +134,16 @@ func main() {
 		os.Exit(1)
 	}
 
+	u, err := upgrader.NewV1Alpha1(mgr.GetClient())
+	if err != nil {
+		setupLog.Error(err, "unable to create upgrader")
+		os.Exit(1)
+	}
+
 	if err = (&controllers.PoolReconciler{
-		Client: mgr.GetClient(),
-		Log:    ctrl.Log.WithName("controllers").WithName("Pool"),
+		Client:   mgr.GetClient(),
+		Log:      ctrl.Log.WithName("controllers").WithName("Pool"),
+		Upgrader: u,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Pool")
 		os.Exit(1)
