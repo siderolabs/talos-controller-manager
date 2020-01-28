@@ -66,22 +66,7 @@ func (r *PoolReconciler) reconcile(ctx context.Context, req ctrl.Request, log lo
 		return ctrl.Result{}, err
 	}
 
-	if time.Until(pool.Status.NextRun.Time) > pool.Spec.CheckInterval.Duration {
-		log.Info("rescheduling next run to checkInterval duration", "checkinterval", pool.Spec.CheckInterval.Duration)
-
-		pool.Status.NextRun = metav1.NewTime(time.Now().UTC().Add(pool.Spec.CheckInterval.Duration))
-
-		if err := r.Update(context.TODO(), &pool); err != nil {
-			return r.Result(ctx, req, false, log), err
-		}
-
-		return ctrl.Result{RequeueAfter: pool.Spec.CheckInterval.Duration}, nil
-	}
-
-	if pool.Status.NextRun.Time.After(time.Now().UTC()) {
-		log.Info("skipping reconciliation, next run is in the future")
-		return ctrl.Result{RequeueAfter: pool.Spec.CheckInterval.Duration}, nil
-	}
+	// Update the version.
 
 	v := pool.Spec.Version
 
@@ -125,7 +110,7 @@ func (r *PoolReconciler) reconcile(ctx context.Context, req ctrl.Request, log lo
 		}
 	}
 
-	policy := upgrader.NewConcurrentPolicy(r.Upgrader, pool.Spec.Concurrency)
+	// Get all nodes that are part of the pool.
 
 	label, err := labels.NewRequirement(constants.V1Alpha1PoolLabel, selection.Equals, []string{pool.Name})
 	if err != nil {
@@ -142,12 +127,31 @@ func (r *PoolReconciler) reconcile(ctx context.Context, req ctrl.Request, log lo
 		return r.Result(ctx, req, false, log), err
 	}
 
-	// Update the status.
+	// Update the size status.
 
 	pool.Status.Size = len(nodes.Items)
 
 	if err := r.Update(context.TODO(), &pool); err != nil {
 		return r.Result(ctx, req, false, log), err
+	}
+
+	// Check if we should run an upgrade.
+
+	if time.Until(pool.Status.NextRun.Time) > pool.Spec.CheckInterval.Duration {
+		log.Info("rescheduling next run to checkInterval duration", "checkinterval", pool.Spec.CheckInterval.Duration)
+
+		pool.Status.NextRun = metav1.NewTime(time.Now().UTC().Add(pool.Spec.CheckInterval.Duration))
+
+		if err := r.Update(context.TODO(), &pool); err != nil {
+			return r.Result(ctx, req, false, log), err
+		}
+
+		return ctrl.Result{RequeueAfter: pool.Spec.CheckInterval.Duration}, nil
+	}
+
+	if pool.Status.NextRun.Time.After(time.Now().UTC()) {
+		log.Info("skipping reconciliation, next run is in the future")
+		return ctrl.Result{RequeueAfter: pool.Spec.CheckInterval.Duration}, nil
 	}
 
 	// Attempt to continue any existing upgrades.
@@ -164,6 +168,8 @@ func (r *PoolReconciler) reconcile(ctx context.Context, req ctrl.Request, log lo
 	}
 
 	log.Info("upgrades in progress", "count", len(nodesInProgess.Items), "channel", pool.Spec.Channel)
+
+	policy := upgrader.NewConcurrentPolicy(r.Upgrader, pool.Spec.Concurrency)
 
 	if len(nodesInProgess.Items) > 0 {
 		if err := policy.Run(req, nodesInProgess, v); err != nil {

@@ -151,7 +151,6 @@ func main() {
 	// +kubebuilder:scaffold:builder
 
 	setupLog.Info("starting manager")
-	// if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
 	if err := run(mgr, "talos-controller-manager", "talos-system"); err != nil {
 		setupLog.Error(err, "problem running manager")
 		os.Exit(1)
