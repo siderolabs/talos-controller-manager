@@ -25,7 +25,7 @@ type PoolSpec struct {
 type PoolStatus struct {
 	Size       int         `json:"size,omitempty"`
 	NextRun    metav1.Time `json:"nextRun,omitempty"`
-	InProgress string      `json:"inProgess,omitempty"`
+	InProgress string      `json:"inProgress,omitempty"`
 	Version    string      `json:"version,omitempty"`
 }
 
@@ -39,7 +39,7 @@ type PoolStatus struct {
 // +kubebuilder:printcolumn:name="Size",type="integer",JSONPath=".status.size",description="the number of nodes in the pool"
 // +kubebuilder:printcolumn:name="Concurrency",type="string",JSONPath=".spec.concurrency",description="the pool's maximum number of concurrent upgrades"
 // +kubebuilder:printcolumn:name="Next Run",type="string",format="date-time",JSONPath=".status.nextRun",description="when the next upgrade attempt will be made (UTC time standard)"
-// +kubebuilder:printcolumn:name="In Progress",type="string",JSONPath=".status.inProgess",description="the nodes in the pool that are currently in progress of upgrading"
+// +kubebuilder:printcolumn:name="In Progress",type="string",JSONPath=".status.inProgress",description="the nodes in the pool that are currently in progress of upgrading"
 type Pool struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
