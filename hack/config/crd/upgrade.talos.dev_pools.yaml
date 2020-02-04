@@ -30,7 +30,7 @@ spec:
     format: date-time
     name: Next Run
     type: string
-  - JSONPath: .status.inProgess
+  - JSONPath: .status.inProgress
     description: the nodes in the pool that are currently in progress of upgrading
     name: In Progress
     type: string
@@ -79,7 +79,7 @@ spec:
         status:
           description: PoolStatus defines the observed state of Pool
           properties:
-            inProgess:
+            inProgress:
               type: string
             nextRun:
               format: date-time
