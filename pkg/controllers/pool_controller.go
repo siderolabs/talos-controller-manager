@@ -19,6 +19,7 @@ import (
 	"k8s.io/apimachinery/pkg/selection"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
 
 	poolv1alpha1 "github.com/talos-systems/talos-controller-manager/api/v1alpha1"
 	"github.com/talos-systems/talos-controller-manager/pkg/channel"
@@ -47,8 +48,9 @@ func (r *PoolReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	return r.reconcile(ctx, req, log)
 }
 
-func (r *PoolReconciler) SetupWithManager(mgr ctrl.Manager) error {
+func (r *PoolReconciler) SetupWithManager(mgr ctrl.Manager, options controller.Options) error {
 	return ctrl.NewControllerManagedBy(mgr).
+		WithOptions(options).
 		For(&poolv1alpha1.Pool{}).
 		Complete(r)
 }
