@@ -24,6 +24,7 @@ import (
 	"k8s.io/client-go/tools/leaderelection"
 	"k8s.io/client-go/tools/leaderelection/resourcelock"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	// +kubebuilder:scaffold:imports
@@ -144,7 +145,7 @@ func main() {
 		Client:   mgr.GetClient(),
 		Log:      ctrl.Log.WithName("controllers").WithName("Pool"),
 		Upgrader: u,
-	}).SetupWithManager(mgr); err != nil {
+	}).SetupWithManager(mgr, controller.Options{MaxConcurrentReconciles: 10}); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Pool")
 		os.Exit(1)
 	}
