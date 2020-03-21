@@ -10,8 +10,6 @@ const (
 	DefaultRepository = "docker.io/autonomy/installer"
 
 	InstallerVersionLabel = "alpha.talos.dev/version"
-
-	InProgressAnnotation = "v1alpha1.upgrade.talos.dev/inprogress"
 )
 
 // Pool labels

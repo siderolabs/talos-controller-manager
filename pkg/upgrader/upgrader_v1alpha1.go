@@ -8,7 +8,6 @@ import (
 	"bufio"
 	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"net"
@@ -19,7 +18,6 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/pkg/errors"
 	poolv1alpha1 "github.com/talos-systems/talos-controller-manager/api/v1alpha1"
-	"github.com/talos-systems/talos-controller-manager/pkg/constants"
 
 	"github.com/talos-systems/talos/api/common"
 	machineapi "github.com/talos-systems/talos/api/machine"
@@ -33,8 +31,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/apimachinery/pkg/util/strategicpatch"
 	"k8s.io/client-go/rest"
 	restclient "k8s.io/client-go/rest"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -120,7 +116,7 @@ func NewV1Alpha1(ctrlclient ctrlclient.Client) (v *V1Alpha1, err error) {
 	return v, nil
 }
 
-func (v1alpha1 V1Alpha1) Upgrade(req reconcile.Request, node corev1.Node, tag string) (err error) {
+func (v1alpha1 V1Alpha1) Upgrade(req reconcile.Request, node corev1.Node, tag string, inProgess bool) (err error) {
 	var pool poolv1alpha1.Pool
 	if err := v1alpha1.ctrlclient.Get(context.Background(), req.NamespacedName, &pool); err != nil {
 		if apierrors.IsNotFound(err) {
@@ -153,7 +149,6 @@ func (v1alpha1 V1Alpha1) Upgrade(req reconcile.Request, node corev1.Node, tag st
 		return err
 	}
 
-	_, inProgess := node.ObjectMeta.Annotations[constants.InProgressAnnotation]
 	// TODO(andrewrynhard): Use semantic versioning to figure out if the
 	// the node is on an older version.
 	upToDate := version.Tag == tag
@@ -162,8 +157,8 @@ func (v1alpha1 V1Alpha1) Upgrade(req reconcile.Request, node corev1.Node, tag st
 	case upToDate && inProgess:
 		// This means that the current operator has become the leader, but
 		// another operator initiated the upgrade and failed to remove the
-		// annotation for some reason. So we skip making an upgrade request
-		// and try to pick up where the upgrade left off.
+		// in progress status for some reason. So we skip making an upgrade
+		// request and try to pick up where the upgrade left off.
 		fallthrough
 	case !upToDate && inProgess:
 		// See above case.
@@ -172,12 +167,6 @@ func (v1alpha1 V1Alpha1) Upgrade(req reconcile.Request, node corev1.Node, tag st
 		return nil
 	case !upToDate && !inProgess:
 		v1alpha1.log.Info("upgrading node", "node", node.Name, "current version", version.Tag, "target version", tag, "installer", image)
-
-		if err = v1alpha1.annotate(node, false); err != nil {
-			return err
-		}
-
-		v1alpha1.log.Info("added annotation", "node", node.Name, "annotation", constants.InProgressAnnotation)
 
 		// TODO(andrewrynhard): Remove this.
 		time.Sleep(5 * time.Second)
@@ -270,35 +259,6 @@ func (v1alpha1 *V1Alpha1) removeInProgress(req reconcile.Request, name string) e
 	return nil
 }
 
-func (v1alpha1 *V1Alpha1) annotate(node corev1.Node, remove bool) (err error) {
-	oldData, err := json.Marshal(node)
-	if err != nil {
-		return fmt.Errorf("failed to marshal unmodified node %q into JSON: %w", node.Name, err)
-	}
-
-	if remove {
-		delete(node.ObjectMeta.Annotations, constants.InProgressAnnotation)
-	} else {
-		// TODO(andrewrynhard): We should drop a JSON blob here that holds which
-		// version the node is upgrading from and to.
-		node.ObjectMeta.Annotations[constants.InProgressAnnotation] = ""
-	}
-
-	newData, err := json.Marshal(node)
-	if err != nil {
-		return fmt.Errorf("failed to marshal modified node %q into JSON: %w", node.Name, err)
-	}
-
-	patchBytes, err := strategicpatch.CreateTwoWayMergePatch(oldData, newData, corev1.Node{})
-	if err != nil {
-		return fmt.Errorf("failed to create two way merge patch: %w", err)
-	}
-
-	_, err = v1alpha1.kubeclient.CoreV1().Nodes().Patch(node.Name, types.StrategicMergePatchType, patchBytes)
-
-	return err
-}
-
 func (v1alpha1 *V1Alpha1) waitForHealthy(node corev1.Node) (err error) {
 	wait := func() error {
 		err = retry.Constant(15*time.Minute, retry.WithUnits(3*time.Second), retry.WithJitter(500*time.Millisecond)).Retry(func() error {
@@ -387,12 +347,6 @@ func (v1alpha1 *V1Alpha1) cleanup(node corev1.Node) (err error) {
 	}
 
 	v1alpha1.log.Info("node uncordoned", "node", node.Name)
-
-	if err = v1alpha1.annotate(node, true); err != nil {
-		return err
-	}
-
-	v1alpha1.log.Info("removed annotation", "node", node.Name, "annotation", constants.InProgressAnnotation)
 
 	return nil
 }

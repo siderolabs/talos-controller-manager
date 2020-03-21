@@ -10,5 +10,5 @@ import (
 )
 
 type Upgrader interface {
-	Upgrade(reconcile.Request, corev1.Node, string) error
+	Upgrade(reconcile.Request, corev1.Node, string, bool) error
 }
