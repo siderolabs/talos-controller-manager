@@ -13,9 +13,9 @@ type SerialPolicy struct {
 	Upgrader
 }
 
-func (policy SerialPolicy) Run(req reconcile.Request, nodes corev1.NodeList, version string) error {
+func (policy SerialPolicy) Run(req reconcile.Request, nodes corev1.NodeList, version string, inProgress bool) error {
 	for _, node := range nodes.Items {
-		if err := policy.Upgrade(req, node, version); err != nil {
+		if err := policy.Upgrade(req, node, version, inProgress); err != nil {
 			return err
 		}
 	}

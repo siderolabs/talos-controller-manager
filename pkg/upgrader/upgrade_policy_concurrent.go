@@ -21,9 +21,10 @@ type ConcurrentPolicy struct {
 }
 
 type Job struct {
-	req     reconcile.Request
-	node    corev1.Node
-	version string
+	req        reconcile.Request
+	node       corev1.Node
+	version    string
+	inProgress bool
 }
 
 type Result struct {
@@ -39,7 +40,7 @@ func NewConcurrentPolicy(u Upgrader, c int) ConcurrentPolicy {
 	}
 }
 
-func (policy ConcurrentPolicy) Run(req reconcile.Request, nodes corev1.NodeList, version string) error {
+func (policy ConcurrentPolicy) Run(req reconcile.Request, nodes corev1.NodeList, version string, inProgress bool) error {
 	jobs := make(chan Job, policy.Concurrency)
 	results := make(chan Result, len(nodes.Items))
 
@@ -48,7 +49,7 @@ func (policy ConcurrentPolicy) Run(req reconcile.Request, nodes corev1.NodeList,
 	}
 
 	for _, node := range nodes.Items {
-		jobs <- Job{req, node, version}
+		jobs <- Job{req, node, version, inProgress}
 	}
 
 	close(jobs)
@@ -69,7 +70,7 @@ func (policy ConcurrentPolicy) worker(id int, jobs <-chan Job, results chan<- Re
 	for j := range jobs {
 		policy.log.Info("assigned worker to node", "id", id, "node", j.node.Name)
 
-		if err := policy.Upgrade(j.req, j.node, j.version); err != nil {
+		if err := policy.Upgrade(j.req, j.node, j.version, j.inProgress); err != nil {
 			results <- Result{j, err}
 		}
 

@@ -174,7 +174,7 @@ func (r *PoolReconciler) reconcile(ctx context.Context, req ctrl.Request, log lo
 	policy := upgrader.NewConcurrentPolicy(r.Upgrader, pool.Spec.Concurrency)
 
 	if len(nodesInProgess.Items) > 0 {
-		if err := policy.Run(req, nodesInProgess, v); err != nil {
+		if err := policy.Run(req, nodesInProgess, v, true); err != nil {
 			log.Error(err, "upgrade failed")
 
 			return r.Result(ctx, req, true, log), err
@@ -183,7 +183,7 @@ func (r *PoolReconciler) reconcile(ctx context.Context, req ctrl.Request, log lo
 
 	// Upgrade all nodes.
 
-	if err := policy.Run(req, nodes, v); err != nil {
+	if err := policy.Run(req, nodes, v, false); err != nil {
 		log.Error(err, "upgrade failed")
 
 		return r.Result(ctx, req, true, log), err
