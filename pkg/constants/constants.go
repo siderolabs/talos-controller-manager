@@ -7,7 +7,7 @@ package constants
 const (
 	DefaultRegistry = "https://registry-1.docker.io"
 
-	DefaultRepository = "docker.io/autonomy/installer"
+	DefaultRepository = "autonomy/installer"
 
 	InstallerVersionLabel = "alpha.talos.dev/version"
 )

@@ -11,13 +11,6 @@ import (
 )
 
 func TestFilterSemver(t *testing.T) {
-	tags := []string{
-		"v0.2.0",
-		"v0.3.0-beta.0",
-		"v0.3.0-alpha.8",
-		"v0.3.0-alpha.7-22-gbaaa308b",
-		"v0.3.0-alpha.7-21-g8c7fadde",
-	}
 	type args struct {
 		ch   string
 		tags []string
@@ -28,28 +21,90 @@ func TestFilterSemver(t *testing.T) {
 		wantTarget *string
 	}{
 		{
+			name: "latest version",
+			args: args{
+				ch: channel.LatestChannel,
+				tags: []string{
+					"v0.1.0",
+					"v0.1.0-STRING",
+					"v0.2.0-alpha.0-STRING",
+					"v0.2.0-alpha.1",
+					"v0.2.0-alpha.1-STRING",
+				},
+			},
+			wantTarget: ptr("v0.2.0-alpha.1-STRING"),
+		},
+		{
 			name: "alpha version",
 			args: args{
-				ch:   channel.AlphaChannel,
-				tags: tags,
+				ch: channel.AlphaChannel,
+				tags: []string{
+					"v0.1.0",
+					"v0.1.0-STRING",
+					"v0.2.0-alpha.0-STRING",
+					"v0.2.0-alpha.1",
+				},
 			},
-			wantTarget: ptr("v0.3.0-alpha.8"),
+			wantTarget: ptr("v0.2.0-alpha.1"),
+		},
+		{
+			name: "alpha version older than latest stable",
+			args: args{
+				ch: channel.AlphaChannel,
+				tags: []string{
+					"v0.1.0",
+					"v0.1.0-STRING",
+					"v0.2.0-alpha.0-STRING",
+					"v0.2.0-alpha.1",
+					"v0.2.0",
+				},
+			},
+			wantTarget: ptr("v0.2.0"),
 		},
 		{
 			name: "beta version",
 			args: args{
-				ch:   channel.BetaChannel,
-				tags: tags,
+				ch: channel.BetaChannel,
+				tags: []string{
+					"v0.1.0",
+					"v0.1.0-STRING",
+					"v0.2.0-alpha.0-STRING",
+					"v0.2.0-alpha.1",
+					"v0.2.0-beta.0-STRING",
+					"v0.2.0-beta.1",
+				},
 			},
-			wantTarget: ptr("v0.3.0-beta.0"),
+			wantTarget: ptr("v0.2.0-beta.1"),
+		},
+		{
+			name: "beta version older than latest stable",
+			args: args{
+				ch: channel.BetaChannel,
+				tags: []string{
+					"v0.1.0",
+					"v0.1.0-STRING",
+					"v0.2.0-alpha.0-STRING",
+					"v0.2.0-alpha.1",
+					"v0.2.0-beta.0-STRING",
+					"v0.2.0-beta.1",
+					"v0.3.0",
+					"v0.4.0-alpha.0",
+				},
+			},
+			wantTarget: ptr("v0.3.0"),
 		},
 		{
 			name: "stable version",
 			args: args{
-				ch:   channel.StableChannel,
-				tags: tags,
+				ch: channel.StableChannel,
+				tags: []string{
+					"v0.1.0",
+					"v0.1.0-STRING",
+					"v0.2.0-alpha.0-STRING",
+					"v0.2.0-alpha.1",
+				},
 			},
-			wantTarget: ptr("v0.2.0"),
+			wantTarget: ptr("v0.1.0"),
 		},
 	}
 	for _, tt := range tests {

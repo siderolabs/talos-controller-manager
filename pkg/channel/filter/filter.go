@@ -45,13 +45,16 @@ func FilterTagsFor(s, reg, repository string) (target *string) {
 	return target
 }
 
+// FilterSemver filters a set of tags by enforcing alpha >= beta >= stable.
 func FilterSemver(ch string, tags []string) (target *string) {
 	v1, _ := semver.New("0.0.0")
+
 	for _, tag := range tags {
 		v2, err := semver.ParseTolerant(tag)
 		if err != nil {
 			continue
 		}
+
 		// In the case of a commit SHA that is all numbers, the semver will
 		// successfully parse. This is a filter to ensure that we skip this
 		// case.
@@ -59,29 +62,34 @@ func FilterSemver(ch string, tags []string) (target *string) {
 			continue
 		}
 
-		if len(v2.Pre) > 0 {
-			// The stable channel forbids prereleases.
-			if ch == channel.StableChannel {
-				continue
-			}
-			// Ensure that we are comparing the prerelease with the requested
-			// channel.
-			pre := v2.Pre[0].String()
-			if pre != ch {
-				continue
-			}
-		}
-
 		switch ch {
-		case channel.AlphaChannel, channel.BetaChannel:
-			if len(v2.Pre) < 2 {
+		case channel.StableChannel:
+			if len(v2.Pre) > 0 {
+				// Filter out all prereleases.
+				continue
+			}
+		case channel.BetaChannel, channel.AlphaChannel:
+			// Skip releases that could be X number of commits ahead of a stable
+			// release (e.g. v0.1.0-X-gSHA, notice it is missing the alpha/beta).
+			if len(v2.Pre) != 2 {
+				break
+			}
+
+			// If the requested channel is beta, filter out all alphas.
+			if ch == channel.BetaChannel && v2.Pre[0].String() == channel.AlphaChannel {
 				continue
 			}
 
+			// All alpha and beta channels should never have a VersionStr, as that
+			// would indicate that the version is of the form
+			// major.minor.patch-pre.STRING (e.g. v0.1.0-alpha.0-abc) opposed to
+			// major.minor.patch-pre.NUMBER (e.g. v0.1.0-alpha.0). The former means
+			// this tag is in the "latest" channel.
 			if v2.Pre[1].VersionStr != "" {
 				continue
 			}
 		case channel.LatestChannel, channel.EdgeChannel:
+			// Nothing to do.
 		}
 
 		if v1.LT(v2) {
