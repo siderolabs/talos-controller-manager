@@ -1,28 +1,29 @@
 policies:
   - type: commit
     spec:
-      headerLength: 89
       dco: true
       gpg: false
-      imperative: true
+      spellcheck:
+        locale: US
       maximumOfOneCommit: true
-      requireCommitBody: true
+      header:
+        length: 89
+        imperative: true
+        case: lower
+        invalidLastCharacters: .
+      body:
+        required: true
       conventional:
-        types:
-          - chore
-          - docs
-          - perf
-          - refactor
-          - style
-          - test
+        types: ['chore', 'docs', 'perf', 'refactor', 'style', 'test', 'release']
+        scopes: ['*']
   - type: license
     spec:
       skipPaths:
         - .git/
-        - .buildkit/
       includeSuffixes:
         - .go
       excludeSuffixes:
+        - .pb.go
         - .deepcopy.go
       header: |
         // This Source Code Form is subject to the terms of the Mozilla Public
