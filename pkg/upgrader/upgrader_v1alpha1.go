@@ -131,7 +131,7 @@ func (v1alpha1 V1Alpha1) Upgrade(req reconcile.Request, node corev1.Node, tag st
 	}
 
 	// TODO(andrewrynhard): This should be passed in.
-	image := fmt.Sprintf("docker.io/%s:%s", pool.Spec.Repository, tag)
+	image := fmt.Sprintf("ghcr.io/%s:%s", pool.Spec.Repository, tag)
 
 	// TODO(andrewrynhard): Ensure that we have found the internal address.
 	var target string
